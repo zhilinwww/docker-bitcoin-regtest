@@ -1,0 +1,183 @@
+ Win7 建立实验用 local Bitcoin network
+作者:陳兆麟 Email:chenlin2@ms9.hinet.net
+要搞懂 IBM [区块链] (blockchain)的工作原理不容易,可先由资源较多的比特币交易 (使用区块链技术的金融交易系统)切入,请阅读参考文献;看完后若是一片模糊,可自行动手做一遍 [比特币交易] 实验版 [参考文献1],观念就会更加清楚;以下范例user可在Win7安装 docker后执行;操作过程可用来检验理论叙述,就可避免观念混淆。
+開發環境:Win7 (64 bit) ,Docker Toolbox,blockchain,Bitcoin
+1.参考附录 (1) 在 Win7安装 Docker Toolbox.
+
+(Win 10 可直接安装 Docker 请参考附录2 )
+
+    1
+    2
+
+2.桌面点选 (Docker Quickstart Terminal) 名稱
+
+$ docker-machine env default
+
+export DOCKER_TLS_VERIFY=”1”
+export DOCKER_HOST=”tcp://192.168.99.100:2376”
+export DOCKER_CERT_PATH=”C:\Users\slim1.docker\machine\machines\default”
+export DOCKER_MACHINE_NAME=”default”
+eval(“C:\Program Files\Docker Toolbox\docker-machine.exe” env default)
+$ docker-machine ls (确定虚拟机已经启动)
+
+NAME ACTIVE DRIVER STATE URL SWARM DOCKER ERRORS
+default * virtualbox Running tcp://192.168.99.100:2376 v1.10.3
+3.使用 putty (见附录 3)登录虚拟机器(ip:192.168.99.100 username=docker password=tcuser)
+
+4.匯入測試源碼
+$cd /home/docker
+$git clone https://github.com/gak/docker-bitcoin-regtest (regtest network)
+$cd /home/docker/docker-bitcoin-regtest
+$docker build -t gak/bitcoin-regtest bitcoin-regtest (建立Bitcoin docker image)
+
+$docker run -t -p 18444:18444 -p 18332:18332 --name=alice --hostname=alice -i gak/bitcoin-regtest bash (启动 container alice并进入 shell)
+root@alice:/#
+5. 再使用 putty 开启另一终端机
+$docker run -t -p 19444:18444 -p 19332:18332 --name=bob --hostname=bob gak/bitcoin-regtest bash (启动 container alice并进入 shell)
+root@bob:/#exit
+6. $docker ps (显示目前正在执行的container)
+
+若 container 停止执行,可重新启动 bob container
+$docker start bob
+$docker exec -it bob bash (重新进入 container bob shell (同 alice)
+root@bob:/
+7.以下指令显示 bob & alice 2者电子钱包初始余额皆为 0
+root@bob:/#bitcoind -regtest -daemon –printtoconsole & (启动 bitcoind 常驻程序)
+root@bob:/# bitcoin-cli -regtest getbalance (显示 alice电子钱包目前余额)
+
+0.00000000
+root@alice:/#bitcoind -regtest -daemon –printtoconsole & (启动 bitcoind 常驻程序)
+root@alice:/# bitcoin-cli -regtest getbalance (显示 bob电子钱包目前余额)
+
+0.0000000
+8. 以下指令显示regtest Network #### root@alice:/#bitcoin-cli -regtest getinfo (并无 mined block)
+
+2016-09-05 07:27:41 keypool added key 102, size=101
+2016-09-05 07:27:41 keypool reserve 2
+2016-09-05 07:27:41 keypool return 2
+{
+“version”: 120100,
+“protocolversion”: 70012,
+“walletversion”: 60000,
+“balance”: 0.00000000,
+“blocks”: 0,
+“timeoffset”: 0,
+“connections”: 0,
+“proxy”: “”,
+“difficulty”: 4.656542373906925e-10,
+“testnet”: false,
+“keypoololdest”: 1473032836,
+“keypoolsize”: 101,
+“paytxfee”: 0.00000000,
+“relayfee”: 0.00001000,
+“errors”: “”
+}
+root@alice:/# bitcoin-cli -regtest getpeerinfo (alice并无连结记录)
+
+[
+]
+9. 指令getblockhash index 返回 genesis index 区块的hash值
+root@alice:/# bitcoin-cli -regtest getblockhash 0
+
+0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206
+root@alice:/#ip add (取得 alice ip)
+
+inet 172.17.0.2/16 scope global eth0
+root@bob:/# ip add (取得 bob ip)
+
+inet 172.17.0.3/16 scope global eth0
+10. bob 使用 alice ip 连结 alice
+root@bob:/# bitcoin-cli -regtest addnode 172.17.0.2 onetry
+
+2016-09-05 00:12:32 receive version message: /Satoshi:0.12.1/: version 70012, blocks=0, us=0.0.0.0:0, peer=1
+11. 以下指令显示 bob 已被 alice 连结
+root@alice:/# bitcoin-cli -regtest getpeerinfo
+
+[
+{
+“id”: 3,
+“addr”: “172.17.0.3:38466”,
+“services”: “0000000000000005”,
+“relaytxes”: true,
+“lastsend”: 1473034352,
+“lastrecv”: 1473034352,
+“bytessent”: 331,
+“bytesrecv”: 355,
+“conntime”: 1473034352,
+“timeoffset”: 0,
+“pingtime”: 0.054053,
+“minping”: 0.054053,
+“version”: 70012,
+“subver”: “/Satoshi:0.12.1/”,
+“inbound”: true,
+“startingheight”: 0,
+“banscore”: 0,
+“synced_headers”: -1,
+“synced_blocks”: -1,
+“inflight”: [
+],
+“whitelisted”: false
+}
+]
+12. 挖矿是获得比特币的一种方法,本例的Bitcoin network 有 2 nodes (alice , blob),使用 generate 指令仿真挖矿 (建立 mined blocks), blocks 数目到达一定值将获得奖励,例如取得 100 mined blocks,会得到 50 coin 的奖励 (实验用):
+root@alice:/# bitcoin-cli -regtest generate 101 (使 alice 可取得101 mined block)
+root@alice:/# bitcoin-cli -regtest getbalance (验证alice已取得50 coins奖励)
+
+50.00000000
+13. 以下指令bob将取得新地址以便 alice 送来 coins
+root@bob:/# bitcoin-cli -regtest getnewaddress
+
+2016-09-05 00:31:28 keypool added key 102, size=101
+2016-09-05 00:31:28 keypool reserve 2
+2016-09-05 00:31:28 keypool keep 2
+n1XoQ2CWjmNrTJjQE2LyniB6SSsys63bvq (新产生的地址,模拟公钥)
+14.alice 使用 bob 的新地址,送出 42 coins 给 bob
+root@alice:/#bitcoin-cli -regtest sendtoaddress n1XoQ2CWjmNrTJjQE2LyniB6SSsys63bvq 42
+root@alice:/# bitcoin-cli -regtest getbalance (alice 钱包目前余额)
+
+7.99996160
+root@bob:/# bitcoin-cli -regtest getbalance (bob 尚未收到 alice 送来的 42 coins)
+
+0.00000000
+//alice 还必须再获得另 6 confirmation,以下指令将仿真产生 6 confirmation
+$bitcoin-cli -regtest generate 6
+15.验证 bob 已收到 42 coins
+root@bob:/# bitcoin-cli -regtest getbalance
+
+42.00000000
+16. 由以上步骤可得知比特币交易的基本原则,可比较 hyperledger (超级账本) local blockchain network 之建立程序
+
+https://github.com/hyperledger/fabric/blob/master/docs/Setup/Network-setup.md
+附錄
+
+1.Win7 安装Docker Toolbox:
+https://www.docker.com/products/docker-toolbox
+http://knight-.iteye.com/blog/2254627
+http://rominirani.com/2015/08/15/docker-toolbox-setup-windows/
+https://getcarina.com/docs/troubleshooting/troubleshooting-windows-docker-vm-startup/
+http://dockone.io/article/594
+2.Win 10 安装Docker
+http://blog.miniasp.com/post/2016/08/01/Docker-for-Windows-1-12-Released.aspx
+3.putty安装及使用:
+http://www.ascc.sinica.edu.tw/putty
+參考文獻:
+
+1.https://geraldkaszuba.com/creating-your-own-experimental-bitcoin-network/
+2.https://bitcoin.org/en/how-it-works
+3.https://bitcoin.org/zh_TW/how-it-works
+4.https://kknews.cc/finance/28v96r.html
+5.https://bitcoin.org/zh_TW/resources
+6.https://bitcoin.org/en/developer-examples#regtest-mode
+7.http://pansci.asia/archives/53571
+8.http://scimonth.blogspot.tw/2014/01/blog-post_803.html
+9.http://8btc.com/article-1785-1.html
+10.http://zl.yibite.com/course/2014/1013/23993.shtml
+11.https://bitcoin.org/zh_TW/faq#what-is-bitcoin
+12.https://github.com/hyperledger/fabric/blob/master/docs/Setup/Network-setup.md
+13.http://www.techbang.com/posts/16426-dig-rob-super-ramming-bitcoin-first-pot-of-gold-dictionary-of-secretly-reported-71-cheat-cheat-in-january
+14.https://1drv.ms/f/s!AkBmzWP0h-Vxbr7h1uTNsTMcPWI
+15.https://1drv.ms/b/s!AkBmzWP0h-VxazOBOsVz8nGMLpM
+16.https://1drv.ms/b/s!AkBmzWP0h-VxbLK7FOjH9IL5HHc
+17.https://www.youtube.com/watch?v=24JAF9Eu1mk&list=UUOTZe-b_jE_Ovy9K9UhZ4BA&index=74
+18.https://www.youtube.com/watch?v=wSmJ-rwUo8I&list=UUOTZe-b_jE_Ovy9K9UhZ4BA&index=73
+19.https://www.youtube.com/watch?v=SOsn6MvGH60&list=UUOTZe-b_jE_Ovy9K9UhZ4BA&index=72
